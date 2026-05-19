@@ -1,0 +1,465 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{placeins}
+\usepackage{xcolor}
+
+\graphicspath{{figures/}}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    citecolor=blue!50!black,
+    urlcolor=blue!50!black
+}
+
+\title{Seizure Onset as a Dynamical Transition:\ Wilson-Cowan Stability Analysis with CHB-MIT Ictal Detection and Explanation Reliability Checks}
+\author{Gilkiduchen\\AMATH 383 Final Project}
+\date{May 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Epileptic seizures can be modeled as abrupt changes in brain dynamics rather than only as classification labels. This project studies seizure onset using a two-population Wilson-Cowan excitatory-inhibitory ordinary differential equation model, then compares the model's qualitative transition picture with features extracted from a scoped CHB-MIT scalp EEG subset. The mathematical analysis varies an excitability drive parameter $P$, solves equilibria, computes the Jacobian, and classifies local stability using eigenvalues. For the chosen parameters, the model tracks one equilibrium that is stable at low drive, loses local stability over an intermediate interval, and restabilizes at high drive. The stability crossings have complex eigenvalues, so the generated result is best interpreted as a Hopf-like loss of local stability rather than a saddle-node or hysteresis transition. The empirical component uses 51 EDF records from subjects chb01, chb03, and chb05, producing 35,679 non-overlapping 5 second windows. The classifier target is ictal-window detection: seizure-overlapping windows are positive, while baseline and preictal windows are negative. Logistic regression, random forest, and RFECV logistic regression achieved balanced accuracies of 0.915, 0.905, and 0.931, respectively, but precision remained low because the data are highly imbalanced. Feature medians and feature-importance rankings show strong ictal separability through amplitude, spectral-power, and Hjorth-activity variables, while preictal separation is weaker. Finally, a Consistency Index analysis shows that explanation rankings are only partly stable across methods: full-feature CI at $\alpha=0.5$ was 0.432, and RFECV-refit selected-feature CI decreased to 0.407. The project therefore supports a cautious conclusion: the ODE gives a coherent dynamical mechanism for seizure-like oscillatory transitions, while the EEG features provide qualitative support for ictal separability, not a validated clinical seizure-prediction system.
+\end{abstract}
+
+\section{Introduction}
+
+Seizure onset is a natural problem for dynamical-systems modeling. A patient may appear to remain near a normal background regime and then rapidly enter an ictal regime with large-amplitude, organized, or rhythmic electrical activity. Purely data-driven EEG classifiers can identify seizure windows, but a classifier alone does not explain why a transition can occur. A continuous-time mathematical model addresses a different question: under what changes in excitation, inhibition, or external drive does a neural population equilibrium lose local stability and permit seizure-like oscillations?
+
+This paper uses a Wilson-Cowan excitatory-inhibitory model as the main mathematical object \cite{wilson1972}. The model is low-dimensional, but it contains the core ingredients needed for an AMATH 383 analysis: a nonlinear ODE system, equilibria, a Jacobian matrix, eigenvalue-based local stability, phase-plane visualization, and a parameter sweep. Seizure dynamics are more complex than any two-variable model, but the simplified system gives a tractable way to connect excitatory drive and stability change \cite{jirsa2014}.
+
+The empirical component uses the CHB-MIT scalp EEG database as qualitative context \cite{chbmit,shoeb2009}. The purpose is not to fit the ODE directly to patient-specific EEG channels. Instead, EEG features are treated as observables that may reflect amplitude, power, rhythmicity, or complexity changes around seizure onset. The machine-learning task is deliberately framed as ictal-window detection, not seizure prediction. A window is positive only if it overlaps an annotated seizure interval. Preictal windows are included for descriptive context and are treated as negative examples during classifier training.
+
+A secondary goal is to evaluate whether feature-importance explanations are reliable enough to support interpretation. The project adapts the Consistency Index (CI) and RFECV workflow proposed by Chang, Chen, and Chen \cite{chang2026}. The CI combines global rank agreement and top-$k$ feature-set overlap across explanation methods. In this project, the explanation methods are logistic-regression coefficient magnitude, random-forest impurity importance, and random-forest permutation importance.
+
+The main contributions are as follows. First, the Wilson-Cowan system is used to show a Hopf-like loss of local stability over an intermediate drive interval. Second, a scoped CHB-MIT pipeline demonstrates that ictal windows are separable from baseline mainly through amplitude, spectral-power, and Hjorth-activity features. Third, the CI/RFECV analysis shows that higher balanced accuracy does not necessarily imply more consistent explanations.
+
+\section{Wilson-Cowan ODE Model}
+
+\subsection{State variables and equations}
+
+Let $E(t)$ be normalized excitatory population activity and let $I(t)$ be normalized inhibitory population activity. The model is
+\begin{align}
+\frac{dE}{dt} &= \frac{-E + (1-E)S_E(w_{EE}E - w_{EI}I + P)}{\tau_E}, \label{eq:e}\\
+\frac{dI}{dt} &= \frac{-I + (1-I)S_I(w_{IE}E - w_{II}I + Q)}{\tau_I}. \label{eq:i}
+\end{align}
+The response functions are sigmoids,
+\begin{equation}
+S_X(u)=\frac{1}{1+\exp[-a_X(u-\theta_X)]}, \quad X\in\{E,I\}.
+\end{equation}
+The parameter $P$ is interpreted as excitatory drive or excitability. Increasing $P$ is a simplified way to represent increased excitatory input, decreased effective inhibition, or other physiological changes that push the system toward seizure-like behavior.
+
+The fixed parameter values used in the generated analysis are shown in Table \ref{tab:odeparams}. The drive parameter $P$ was swept from 0 to 8 using 201 grid points.
+
+\begin{table}[H]
+\centering
+\caption{Wilson-Cowan parameters used in the generated ODE analysis.}
+\label{tab:odeparams}
+\begin{tabular}{llr}
+\toprule
+Parameter & Meaning & Value \\
+\midrule
+$\tau_E$ & excitatory time scale & 1.0 \\
+$\tau_I$ & inhibitory time scale & 2.0 \\
+$w_{EE}$ & excitatory self-coupling & 10.0 \\
+$w_{EI}$ & inhibitory input to excitatory population & 9.0 \\
+$w_{IE}$ & excitatory input to inhibitory population & 10.0 \\
+$w_{II}$ & inhibitory self-coupling & 2.0 \\
+$Q$ & inhibitory drive & 0.5 \\
+$a_E,a_I$ & sigmoid slopes & 1.5 \\
+$\theta_E,\theta_I$ & sigmoid thresholds & 3.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure \ref{fig:ode_diagram} summarizes the model structure. The drive $P$ enters the excitatory population. The excitatory population drives the inhibitory population, while the inhibitory population suppresses the excitatory population.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{ode_ei_model_diagram.png}
+\caption{Excitatory-inhibitory model diagram. The ODE tracks average excitatory activity $E(t)$ and inhibitory activity $I(t)$. The generated parameter sweep varies the drive $P$ and observes local stability of the resulting equilibrium.}
+\label{fig:ode_diagram}
+\end{figure}
+
+\subsection{Equilibria and Jacobian stability}
+
+Equilibria $(E^*,I^*)$ satisfy
+\begin{equation}
+F(E^*,I^*)=0, \quad G(E^*,I^*)=0,
+\end{equation}
+where $F$ and $G$ are the right-hand sides of \eqref{eq:e} and \eqref{eq:i}. For each value of $P$, equilibria were solved numerically using multiple initial guesses on the unit square.
+
+Let
+\begin{equation}
+S'_E = a_E S_E(1-S_E), \quad S'_I = a_I S_I(1-S_I),
+\end{equation}
+with each sigmoid evaluated at its corresponding input. The Jacobian at a point $(E,I)$ is
+\begin{equation}
+J(E,I)=
+\begin{bmatrix}
+\dfrac{-1-S_E+(1-E)S'_Ew_{EE}}{\tau_E} &
+\dfrac{(1-E)S'_E(-w_{EI})}{\tau_E} \\
+\dfrac{(1-I)S'_Iw_{IE}}{\tau_I} &
+\dfrac{-1-S_I+(1-I)S'_I(-w_{II})}{\tau_I}
+\end{bmatrix}.
+\end{equation}
+An equilibrium is locally stable if all eigenvalues of $J(E^*,I^*)$ have negative real parts. It is unstable if at least one eigenvalue has positive real part. The numerical sweep records the largest real part of the eigenvalues as a stability diagnostic.
+
+\section{CHB-MIT Feature and Classification Pipeline}
+
+\subsection{Dataset scope and labels}
+
+The CHB-MIT component uses a scoped subset rather than the full database. The selected subjects are chb01, chb03, and chb05. The pipeline selects seizure EDF files, neighboring context files, and a small number of baseline context files for each subject. The resulting subset contains 51 EDF records and 35,679 non-overlapping 5 second windows. Table \ref{tab:classbalance} gives the phase counts.
+
+\begin{table}[H]
+\centering
+\caption{Window counts in the scoped CHB-MIT subset. Ictal windows overlap annotated seizure intervals. Preictal windows are within 300 seconds before seizure onset within the same EDF record.}
+\label{tab:classbalance}
+\begin{tabular}{lr}
+\toprule
+Phase & Windows \\
+\midrule
+Baseline & 34,241 \\
+Preictal & 1,143 \\
+Ictal & 295 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The classifier target is
+\begin{equation}
+y = \begin{cases}
+1, & \text{window overlaps an ictal interval},\\
+0, & \text{otherwise.}
+\end{cases}
+\end{equation}
+Thus baseline and preictal windows are negative examples. This design evaluates ictal-window detection. It does not evaluate clinical seizure prediction or early warning.
+
+Preictal labels are record-local in this implementation. Windows in neighboring EDF records are not assigned time-to-next-seizure labels across file boundaries. This limits how strongly the results can be interpreted as evidence for gradual preictal transition.
+
+\subsection{Feature extraction}
+
+Eight bipolar EEG channels were selected where available: FP1-F7, F7-T7, T7-P7, FP2-F8, F8-T8, T8-P8, FZ-CZ, and CZ-PZ. For each 5 second window, channel-level features were computed and then summarized by the channel mean and channel maximum. This gives 50 features: 25 base features multiplied by two channel summaries.
+
+The base features include approximate sample entropy, approximate fuzzy entropy, skewness, kurtosis, delta/theta/alpha/beta band powers, total power from 0.5 to 40 Hz, relative band powers, band-power ratios, spectral entropy, spectral slope from 4 to 40 Hz, beta peak frequency, RMS, line length, zero-crossing rate, and Hjorth activity, mobility, and complexity. These features are not ODE states. They are empirical observables that may reflect the amplitude, spectral, and complexity changes implied by a seizure-like dynamical transition.
+
+\subsection{Train-test split and models}
+
+The train-test split is record-held-out. A GroupShuffleSplit with EDF record as the group variable was used so that windows from the same recording do not appear in both train and test. This avoids within-record leakage, but it does not test generalization to unseen patients because subjects appear across the full scoped subset. The test set contains 10,920 windows, including 72 ictal windows. The test seizure records are listed in Table \ref{tab:testrecords}.
+
+\begin{table}[H]
+\centering
+\caption{Test records containing ictal windows. Subject chb03 appears in the test set only with non-ictal windows.}
+\label{tab:testrecords}
+\begin{tabular}{llrr}
+\toprule
+Subject & Record & Windows & Ictal windows \\
+\midrule
+chb01 & chb01/chb01\_15.edf & 720 & 9 \\
+chb01 & chb01/chb01\_21.edf & 720 & 19 \\
+chb05 & chb05/chb05\_16.edf & 720 & 20 \\
+chb05 & chb05/chb05\_22.edf & 720 & 24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three models were evaluated. The first is logistic regression with median imputation, robust scaling, class weighting, and a liblinear solver. The second is a random forest with median imputation, class-balanced subsampling, 350 trees, maximum depth 10, and minimum leaf size 3. The third is RFECV logistic regression. RFECV used stratified group cross-validation, kept preprocessing inside the estimator pipeline, selected features by logistic-regression coefficients, and then evaluated the selected model on the same held-out test records.
+
+\section{Consistency Index and RFECV}
+
+The project computes feature-importance rankings from three sources: logistic-regression coefficient magnitude, random-forest impurity importance, and random-forest permutation importance. For each method, let $s_m(f)$ be the score assigned to feature $f$ by method $m$.
+
+The Consistency Index combines two components. First, $CI_{\mathrm{rank}}$ is the mean pairwise normalized Spearman agreement between full feature rankings:
+\begin{equation}
+CI_{\mathrm{rank}} = \frac{1}{\binom{M}{2}} \sum_{a<b} \frac{\rho_{ab}+1}{2},
+\end{equation}
+where $\rho_{ab}$ is Spearman's rank correlation between methods $a$ and $b$. Second, $CI_{\mathrm{topk}}$ is the mean pairwise Jaccard overlap between top-$k$ feature sets:
+\begin{equation}
+CI_{\mathrm{topk}} = \frac{1}{\binom{M}{2}} \sum_{a<b} \frac{|T_a \cap T_b|}{|T_a \cup T_b|}.
+\end{equation}
+The combined index is
+\begin{equation}
+CI(\alpha) = \alpha CI_{\mathrm{rank}} + (1-\alpha)CI_{\mathrm{topk}}, \quad 0\leq \alpha \leq 1.
+\end{equation}
+This project uses $k=8$. A high CI means that the explanation methods identify similar drivers. A low CI means that interpretation depends strongly on the importance method or model family. Because this project compares logistic and random-forest explanations, disagreement reflects both explanation-method dependence and model-family dependence.
+
+RFECV selected 22 of 50 features. After feature selection, logistic-regression and random-forest models were refit on the selected subset and CI was recomputed. This distinguishes model-performance improvement from explanation-consistency improvement.
+
+\section{Results}
+
+\subsection{ODE stability transition}
+
+The ODE sweep found one tracked equilibrium for each of the 201 tested values of $P$. Out of these grid points, 171 were locally stable and 30 were unstable. The unstable interval was approximately $P=1.64$ to $P=2.80$ on the chosen grid. The actual crossings lie between neighboring grid points: one crossing is between $P=1.60$ and $P=1.64$, and the second is between $P=2.80$ and $P=2.84$.
+
+Figure \ref{fig:ode_sweep} shows the bifurcation-style equilibrium sweep, the largest real eigenvalue, and representative trajectories. The trajectory labels are stable low drive, unstable interval, and restabilized high drive. In the unstable interval, the trajectory exhibits oscillatory behavior consistent with loss of local stability.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{ode_bifurcation_stability_trajectories.png}
+\caption{ODE equilibrium sweep, local-stability diagnostic, and example trajectories. The shaded region marks the grid-level unstable interval. The middle panel shows the largest real part of the Jacobian eigenvalues crossing zero. The trajectory panel shows stable low $P$, oscillatory behavior in the unstable interval, and restabilized high $P$.}
+\label{fig:ode_sweep}
+\end{figure}
+
+The crossing candidates in Table \ref{tab:crossings} show complex eigenvalues near both stability changes. This supports the Hopf-like interpretation. The result should not be described as a saddle-node transition, hysteresis, or the emergence of a separate stable seizure equilibrium.
+
+\begin{table}[H]
+\centering
+\caption{Selected rows near the ODE stability crossings. The eigenvalues are complex conjugate pairs, and the largest real part changes sign near both ends of the unstable interval.}
+\label{tab:crossings}
+\begin{tabular}{rrrrl}
+\toprule
+$P$ & $E^*$ & $I^*$ & $\max \operatorname{Re}(\lambda)$ & Stability \\
+\midrule
+1.60 & 0.142 & 0.067 & -0.007 & stable \\
+1.64 & 0.154 & 0.076 & 0.032 & unstable \\
+2.80 & 0.336 & 0.294 & 0.008 & unstable \\
+2.84 & 0.341 & 0.300 & -0.011 & stable \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The phase plane in Figure \ref{fig:phaseplane} shows the vector field at $P=2.0$, inside the unstable interval. The red marker denotes the unstable equilibrium. Streamlines show rotational flow structure around the equilibrium, which is visually consistent with an oscillatory instability.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.74\textwidth]{ode_phase_plane.png}
+\caption{Wilson-Cowan phase plane at $P=2.0$, which lies inside the unstable interval. The red X marks the unstable equilibrium. Streamlines illustrate the local flow around the instability.}
+\label{fig:phaseplane}
+\end{figure}
+
+\subsection{CHB-MIT class balance and feature behavior}
+
+The extracted windows are highly imbalanced, as shown in Figure \ref{fig:balance}. Ictal windows account for only 295 of 35,679 total windows. This imbalance explains why high recall can coexist with low precision: even a modest false-positive rate over many baseline windows produces many false-positive windows.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.62\textwidth]{chbmit_class_balance.png}
+\caption{Class balance of extracted CHB-MIT windows. The empirical task is highly imbalanced, with many more baseline windows than ictal windows.}
+\label{fig:balance}
+\end{figure}
+
+Feature medians show clear ictal separability but limited preictal separation for the reported energy features. Table \ref{tab:medians} shows that RMS, theta power, Hjorth activity, and total power increase substantially during ictal windows. Preictal medians remain close to baseline medians.
+
+\begin{table}[H]
+\centering
+\caption{Feature medians by phase. The main separation is ictal versus non-ictal; preictal medians remain close to baseline medians for these energy-related features.}
+\label{tab:medians}
+\begin{tabular}{lrrrr}
+\toprule
+Phase & mean RMS & mean theta power & mean Hjorth activity & mean total power \\
+\midrule
+Baseline & 38.93 & 93.58 & 1,733 & 696.9 \\
+Preictal & 39.57 & 85.80 & 1,790 & 686.9 \\
+Ictal & 119.50 & 1,057.88 & 15,469 & 6,918.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure \ref{fig:trajectories} plots median feature trajectories around seizure onset. The plotted features are robust-z scaled and clipped to $[-8,8]$ for visualization. The transition index is a heuristic visualization, not a clinical score. The figure shows a marked change at or near seizure onset, but does not establish a validated preictal warning interval.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{chbmit_feature_trajectories.png}
+\caption{Median feature trajectories around seizure onset. Features are robust-z scaled and clipped to $[-8,8]$ for visualization. The vertical dashed line marks seizure onset. The sharp change at onset supports ictal separability more strongly than gradual preictal separation.}
+\label{fig:trajectories}
+\end{figure}
+
+\subsection{Ictal-window detection performance}
+
+The three classifiers are summarized in Table \ref{tab:metrics}. RFECV logistic regression had the highest balanced accuracy and recall, but it also had the lowest precision and the highest false-positive-window rate. The random forest had lower recall but better precision and fewer false-positive windows. Thus, RFECV is not simply the best model; it is the most sensitive model in this run.
+
+\begin{table}[H]
+\centering
+\caption{Held-out test performance for ictal-window detection. FP win/hr means false-positive 5 second windows per non-ictal hour. FP event/hr counts contiguous predicted-positive non-ictal windows within a record as one event.}
+\label{tab:metrics}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrr}
+\toprule
+Model & Balanced accuracy & Recall & Precision & Average precision & ROC AUC & FP win/hr & FP event/hr \\
+\midrule
+Logistic regression & 0.915 & 0.875 & 0.115 & 0.743 & 0.979 & 32.26 & 19.91 \\
+Random forest & 0.905 & 0.833 & 0.190 & 0.736 & 0.977 & 16.99 & 11.28 \\
+RFECV logistic regression & 0.931 & 0.917 & 0.100 & 0.730 & 0.983 & 39.42 & 22.17 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+The combined confusion matrices in Figure \ref{fig:confusions} show the same tradeoff in count form. The number of true negatives dominates the color scale because the test set contains 10,848 non-ictal windows and only 72 ictal windows.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{chbmit_all_model_confusion_matrices.png}
+\caption{Confusion matrices for logistic regression, random forest, and RFECV logistic regression. Counts are shown directly because the color scale is dominated by true negatives.}
+\label{fig:confusions}
+\end{figure}
+
+Preictal windows were labeled negative, but the positive-call rates in Table \ref{tab:callrates} show that the models call preictal windows positive more often than baseline windows. This is qualitative onset-near context, not seizure-prediction validation.
+
+\begin{table}[H]
+\centering
+\caption{Positive-call rates by phase on the held-out test set. Preictal windows are negative examples during training, so elevated preictal positive-call rates should be interpreted cautiously.}
+\label{tab:callrates}
+\begin{tabular}{lrrr}
+\toprule
+Model & Baseline & Preictal & Ictal \\
+\midrule
+Logistic regression & 0.0425 & 0.1458 & 0.8750 \\
+Random forest & 0.0222 & 0.0875 & 0.8333 \\
+RFECV logistic regression & 0.0519 & 0.1792 & 0.9167 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Feature importance}
+
+Random-forest permutation importance identifies amplitude and power-related features as the dominant drivers. Figure \ref{fig:importance} shows that mean RMS, mean theta power, and mean Hjorth activity are the top three features by balanced-accuracy drop. This is consistent with the feature-median table: ictal windows have much larger amplitude and power summaries than baseline or preictal windows.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{chbmit_top_feature_importance.png}
+\caption{Top EEG features by random-forest permutation importance. The dominant features are amplitude, spectral-power, and Hjorth-activity variables, which supports an ictal separability interpretation.}
+\label{fig:importance}
+\end{figure}
+
+\subsection{Explanation consistency and RFECV}
+
+The full-feature CI at $\alpha=0.5$ was 0.432, with $CI_{\mathrm{rank}}=0.569$ and $CI_{\mathrm{topk}}=0.295$. This means that the explanation methods have moderate global rank agreement but weak agreement on the exact top-$k$ feature set. Figure \ref{fig:ci_full} shows the alpha sensitivity. Since $CI_{\mathrm{rank}}$ and $CI_{\mathrm{topk}}$ are fixed, $CI(\alpha)$ is linear in $\alpha$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{chbmit_ci_alpha_sensitivity.png}
+\caption{Explanation consistency across full-feature importance methods. The full-feature CI at $\alpha=0.5$ is 0.432. The low top-$k$ overlap indicates that the most important features depend on the explanation method or model family.}
+\label{fig:ci_full}
+\end{figure}
+
+RFECV selected 22 of 50 features. Figure \ref{fig:rfecv_curve} shows the cross-validation balanced-accuracy curve. The selected feature count is marked by the dashed line. The y-axis range is narrow, so small numerical differences appear visually large; many feature counts have similar cross-validation performance.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{chbmit_rfecv_curve.png}
+\caption{RFECV feature-count curve. RFECV selected 22 features. The cross-validation balanced accuracy varies by roughly 0.01 over many feature counts, so the selected count should not be overinterpreted.}
+\label{fig:rfecv_curve}
+\end{figure}
+
+After refitting logistic-regression and random-forest models on the RFECV-selected subset, selected-feature CI at $\alpha=0.5$ was 0.407, with $CI_{\mathrm{rank}}=0.548$ and $CI_{\mathrm{topk}}=0.265$. Figure \ref{fig:ci_compare} compares the full-feature CI and selected-feature CI across alpha. RFECV improved balanced accuracy and recall, but it did not improve explanation consistency in this run.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{chbmit_ci_full_vs_rfecv_selected.png}
+\caption{Full-feature CI versus RFECV-refit selected-feature CI. The selected-feature CI is lower across the alpha range, so RFECV did not make feature explanations more consistent in this run.}
+\label{fig:ci_compare}
+\end{figure}
+
+\section{Discussion}
+
+The ODE and EEG analyses support complementary but different claims. The Wilson-Cowan model gives a mechanistic explanation: changing excitatory drive can move the system into a parameter interval where the equilibrium loses local stability. Because the eigenvalues near the transition are complex, the generated ODE result supports a Hopf-like oscillatory transition. This is mathematically consistent with seizure-like rhythmic activity, but it is not a patient-specific fit.
+
+The CHB-MIT result supports ictal-window separability. The large changes in RMS, theta power, total power, and Hjorth activity show that ictal windows differ strongly from baseline windows in the scoped subset. The empirical evidence for preictal transition is weaker. Preictal medians remain close to baseline medians for the reported energy features, although positive-call rates are higher in preictal windows than baseline windows. This pattern may suggest onset-near feature change, but it does not establish a reliable early-warning model.
+
+The model-comparison results also require caution. RFECV logistic regression produced the highest balanced accuracy and recall, but its false-positive-window rate was the highest. Random forest produced fewer false-positive windows and higher precision. The best model therefore depends on the objective: sensitivity, precision, or false-positive burden.
+
+The CI analysis adds a reliability check. Full-feature CI was moderate to weak, especially for top-$k$ overlap. This suggests that the exact feature explanation is method-dependent. RFECV did not improve CI after refitting on the selected subset. That result is useful because it separates performance selection from interpretation stability: feature selection can improve test recall without making the explanation more robust.
+
+\section{Limitations}
+
+The main mathematical limitation is model simplification. A two-variable Wilson-Cowan system cannot represent spatial seizure propagation, patient-specific anatomy, medication state, multiple seizure types, or electrode-level cortical geometry. The drive parameter $P$ summarizes many biological mechanisms and is not estimated from EEG.
+
+The main empirical limitation is scope. The analysis uses three subjects and 51 EDF records, not the full CHB-MIT database. The split is record-held-out, not subject-held-out, and the test ictal windows come from only four seizure records. Results therefore should not be presented as a full benchmark or as unseen-patient generalization.
+
+The labeling strategy is also limited. Preictal windows are record-local, and neighboring EDF records are not assigned time-to-next-seizure labels across file boundaries. The classifier is trained for ictal-window detection, so the project should not be described as seizure prediction.
+
+Finally, the false-positive metrics are project-level diagnostics. False-positive windows per hour counts 5 second windows, while false-alarm events per hour counts contiguous false-positive windows within a record. Neither metric is a clinically validated alarm burden measure.
+
+\section{Conclusion}
+
+This project shows how seizure onset can be studied as a stability problem in a nonlinear ODE system and then compared cautiously with EEG feature behavior. The Wilson-Cowan model demonstrates a Hopf-like loss of local stability over an intermediate excitability interval, producing seizure-like oscillatory behavior. The CHB-MIT pipeline shows that ictal windows in the scoped subset are separable from non-ictal windows mainly through amplitude, spectral-power, and Hjorth-activity features. RFECV improves recall but increases false positives and does not improve explanation consistency. The most defensible conclusion is that the ODE provides a coherent mathematical mechanism and the EEG features provide qualitative empirical support for ictal separability, but the project is not a clinical seizure-prediction system.
+
+\clearpage
+\appendix
+\section{Additional Generated Figures}
+
+Figure \ref{fig:singlecm} shows the single-model confusion matrix generated by the main CHB-MIT pipeline before the RFECV extension. It corresponds to logistic regression, which had the best balanced accuracy among the two initial models.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.58\textwidth]{chbmit_confusion_matrix.png}
+\caption{Single-model confusion matrix generated by the main pipeline. The RFECV extension later produced the combined confusion-matrix figure used in the main results section.}
+\label{fig:singlecm}
+\end{figure}
+
+Figure \ref{fig:wc_demo} shows the additional Wilson-Cowan demonstration figure generated by the starter script. It is consistent with the main ODE sweep and trajectory figure.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{wilson_cowan_bifurcation_demo.png}
+\caption{Additional Wilson-Cowan demonstration figure generated by the starter script. It shows the same qualitative stability transition structure as the full ODE analysis.}
+\label{fig:wc_demo}
+\end{figure}
+
+\section{RFECV-selected features}
+
+RFECV selected the following 22 features: mean sample entropy approximation, mean fuzzy entropy approximation, mean kurtosis, mean delta relative power, mean theta relative power, mean theta-beta ratio, mean beta-alpha ratio, mean alpha-theta ratio, mean spectral entropy, mean spectral slope from 4 to 40 Hz, mean RMS, mean zero-crossing rate, mean Hjorth activity, mean Hjorth mobility, mean Hjorth complexity, maximum kurtosis, maximum theta relative power, maximum beta relative power, maximum beta-alpha ratio, maximum spectral entropy, maximum beta peak frequency, and maximum Hjorth mobility.
+
+\section{Reproducibility notes}
+
+The generated outputs come from the following scripts in the project repository:
+\begin{verbatim}
+python final_project_seizure_dynamics\scripts\project_ode_analysis.py
+python final_project_seizure_dynamics\scripts\wilson_cowan_demo.py
+python final_project_seizure_dynamics\scripts\project_chbmit_pipeline.py
+    --force-extract
+python final_project_seizure_dynamics\scripts\project_chbmit_pipeline.py
+python final_project_seizure_dynamics\scripts\project_rfecv_extension.py
+\end{verbatim}
+The repository contains cached features and generated result files, but not the raw CHB-MIT EDF files. To rerun raw feature extraction, the raw CHB-MIT dataset should be placed at \texttt{data/chbmit/1.0.0} relative to the repository root. Cached-feature review is sufficient for checking project logic, tables, figures, and model outputs.
+
+\begin{thebibliography}{9}
+
+\bibitem{wilson1972}
+H. R. Wilson and J. D. Cowan.
+\newblock Excitatory and inhibitory interactions in localized populations of model neurons.
+\newblock \emph{Biophysical Journal}, 12(1):1--24, 1972.
+\newblock doi:10.1016/S0006-3495(72)86068-5.
+
+\bibitem{jirsa2014}
+V. K. Jirsa, W. C. Stacey, P. P. Quilichini, A. I. Ivanov, and C. Bernard.
+\newblock On the nature of seizure dynamics.
+\newblock \emph{Brain}, 137(8):2210--2230, 2014.
+\newblock doi:10.1093/brain/awu133.
+
+\bibitem{chbmit}
+J. Guttag.
+\newblock CHB-MIT Scalp EEG Database, version 1.0.0.
+\newblock \emph{PhysioNet}, 2010.
+\newblock doi:10.13026/C2K01R.
+
+\bibitem{shoeb2009}
+A. H. Shoeb.
+\newblock \emph{Application of Machine Learning to Epileptic Seizure Onset Detection and Treatment}.
+\newblock PhD thesis, Massachusetts Institute of Technology, 2009.
+
+\bibitem{chang2026}
+C.-C. Chang, Y. Chen, and C.-Y. Chen.
+\newblock Towards decision-ready explainable machine learning for water quality management using a consistency index and cross-validated feature-selection framework.
+\newblock \emph{Environmental Research}, 297:124207, 2026.
+\newblock doi:10.1016/j.envres.2026.124207.
+
+\bibitem{pedregosa2011}
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay.
+\newblock Scikit-learn: Machine learning in Python.
+\newblock \emph{Journal of Machine Learning Research}, 12:2825--2830, 2011.
+
+\end{thebibliography}
+
+\end{document}
