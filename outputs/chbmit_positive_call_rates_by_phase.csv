@@ -1,0 +1,7 @@
+model,phase,n_windows,positive_call_rate
+logistic_regression,baseline,10608,0.04251508295625943
+logistic_regression,preictal,240,0.14583333333333334
+logistic_regression,ictal,72,0.875
+random_forest,baseline,10608,0.022153092006033184
+random_forest,preictal,240,0.0875
+random_forest,ictal,72,0.8333333333333334

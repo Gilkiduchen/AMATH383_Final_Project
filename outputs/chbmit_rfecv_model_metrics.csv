@@ -1,0 +1,2 @@
+model,accuracy,balanced_accuracy,precision,recall,f1,average_precision,roc_auc,tn,fp,fn,tp,false_positive_windows_per_hour,false_alarm_events_per_hour
+rfecv_logistic_regression,0.945054945054945,0.9309550147492625,0.1,0.9166666666666666,0.18032786885245902,0.7297790300518672,0.9827272308259587,10254,594,6,66,39.424778761061944,22.168141592920353

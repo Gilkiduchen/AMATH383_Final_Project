@@ -1,0 +1,21 @@
+{
+  "n_equilibrium_rows":201,
+  "n_stable":171,
+  "n_unstable":30,
+  "p_min":0.0,
+  "p_max":8.0,
+  "unstable_intervals":[
+    [
+      1.64,
+      2.8
+    ]
+  ],
+  "unstable_intervals_grid":[
+    [
+      1.64,
+      2.8
+    ]
+  ],
+  "grid_resolution_note":"The unstable interval bounds are grid-level values from the chosen P sweep; actual crossings lie between neighboring grid points.",
+  "interpretation":"For these parameters the sweep tracks one equilibrium that loses local stability over a finite P interval; the complex eigenvalues at the crossings suggest a Hopf-like oscillatory transition, not a saddle-node\/hysteresis transition."
+}

@@ -1,0 +1,4 @@
+phase,n_windows,positive_call_rate
+baseline,10608,0.05194193061840121
+ictal,72,0.9166666666666666
+preictal,240,0.17916666666666667
