@@ -10,10 +10,6 @@ This folder collects the first working materials for the course final project. T
 - `02_proposal_draft.md`: starter 2-page proposal text.
 - `03_task_list.md`: concrete checklist from topic approval to final paper or presentation.
 - `04_methods_starter.md`: ODE equations, stability plan, CI formula, and data-to-model mapping.
+- `05_project_proposal_submission.md`: polished 2-4 page proposal aligned with the assignment prompt and rubric.
 - `scripts/wilson_cowan_demo.py`: small ODE/bifurcation starter script.
 - `scripts/consistency_index.py`: reusable CI computation helper.
-
-## Date Note
-
-The guideline file says the 2-page proposal is due "Tuesday May 18th." In the 2026 calendar, May 18, 2026 is Monday. The safest action is to confirm the exact Canvas deadline with the instructor, but treat **May 18, 2026** as the working deadline.
-
